@@ -154,6 +154,7 @@ endif
 ifneq ($(SOURCES),)
 	TARGETFLAGS += SOURCES=$(SOURCES)
 endif
+TARGETFLAGS += vs2015
 
 ###########################################################################
 #
