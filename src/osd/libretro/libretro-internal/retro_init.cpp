@@ -1,4 +1,4 @@
-#include <unistd.h>
+/*#include <unistd.h>*/
 #include <stdint.h>
 #include <string.h>
 
@@ -12,7 +12,6 @@
 #include "libretro.h"
 #include "options.h"
 #include "osdepend.h"
-#include "modules/lib/osdobj_common.h"
 
 #include "modules/lib/osdobj_common.h"
 #include "modules/lib/osdlib.h"

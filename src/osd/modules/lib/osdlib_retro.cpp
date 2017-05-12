@@ -1,6 +1,6 @@
 
 #include <stdlib.h>
-#include <unistd.h>
+//#include <unistd.h>
 #ifndef _WIN32
 #include <sys/mman.h>
 #else
@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <time.h>
-#include <sys/time.h>
+//#include <sys/time.h>
 #ifdef SDLMAME_EMSCRIPTEN
 #include <emscripten.h>
 #endif
