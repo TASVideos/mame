@@ -408,7 +408,7 @@ namespace bx
 
 		return (void*)uintptr_t(pid);
 #elif BX_PLATFORM_WINDOWS
-		STARTUPINFO si;
+		STARTUPINFOA si;
 		memSet(&si, 0, sizeof(STARTUPINFO) );
 		si.cb = sizeof(STARTUPINFO);
 
