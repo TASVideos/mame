@@ -25,6 +25,17 @@ newoption {
 	description = "Default search path for .ini files",
 }
 
+-- portaudio never needed for a headless product
+newoption {
+	trigger = "NO_USE_PORTAUDIO",
+	description = "Disable PortAudio interface",
+	allowed = {
+		{ "0",  "Enable PortAudio"  },
+		{ "1",  "Disable PortAudio" },
+	},
+}
+_OPTIONS["NO_USE_PORTAUDIO"]="1"
+
 BASE_TARGETOS       = "unix"
 SDLOS_TARGETOS      = "unix"
 SDL_NETWORK         = ""
