@@ -269,6 +269,7 @@ void retro_osd_interface::init(running_machine &machine)
 //============================================================
 //  customize_input_type_list
 //============================================================
+
 void retro_osd_interface::customize_input_type_list(simple_list<input_type_entry> &typelist)
 {
 	// This function is called on startup, before reading the
@@ -294,6 +295,36 @@ void retro_osd_interface::customize_input_type_list(simple_list<input_type_entry
 			default:
 				break;
 		}
+}
 
+size_t retro_serialize_size(void)
+{
+	if (retro_global_osd)
+		return retro_global_osd->machine().save().get_save_buffer_size();
+	else
+		return 0;
+}
 
+bool retro_serialize(void *data, size_t size)
+{
+	if (retro_serialize_size() && data && size)
+	{
+		retro_global_osd->machine().schedule_buffer_save(data, size);
+
+		return true;
+	}
+
+	return false;
+}
+
+bool retro_unserialize(const void *data, size_t size)
+{
+	if (retro_serialize_size() && data && size)
+	{
+		retro_global_osd->machine().schedule_buffer_load((void *)data, size);
+
+		return true;
+	}
+
+	return false;
 }

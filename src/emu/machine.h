@@ -238,6 +238,8 @@ void retro_loop();
 	void schedule_soft_reset();
 	void schedule_save(std::string &&filename);
 	void schedule_load(std::string &&filename);
+	void schedule_buffer_save(void *buffer, size_t size);
+	void schedule_buffer_load(void *buffer, size_t size);
 
 	// date & time
 	void base_datetime(system_time &systime);
@@ -363,6 +365,8 @@ private:
 	saveload_schedule       m_saveload_schedule;
 	attotime                m_saveload_schedule_time;
 	std::string             m_saveload_pending_file;
+	void *                  m_saveload_buffer;
+	size_t                  m_saveload_buffer_size;
 	const char *            m_saveload_searchpath;
 
 	// notifier callbacks

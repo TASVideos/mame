@@ -612,11 +612,11 @@ void retro_unload_game(void)
       retro_pause = -1;
 }
 
-/* Stubs */
-size_t retro_serialize_size(void) { return 0; }
-bool retro_serialize(void *data, size_t size) { return false; }
-bool retro_unserialize(const void * data, size_t size) { return false; }
+extern size_t retro_serialize_size(void);
+extern bool retro_serialize(void *data, size_t size);
+extern bool retro_unserialize(const void * data, size_t size);
 
+/* Stubs */
 unsigned retro_get_region (void) { return RETRO_REGION_NTSC; }
 void *retro_get_memory_data(unsigned type) { return 0; }
 size_t retro_get_memory_size(unsigned type) { return 0; }

@@ -633,6 +633,26 @@ void running_machine::schedule_save(std::string &&filename)
 
 
 //-------------------------------------------------
+//  schedule_buffer_save - schedule a buffered
+//  save to occur as soon as possible
+//-------------------------------------------------
+
+void running_machine::schedule_buffer_save(void *buffer, size_t size)
+{
+	// set the buffer for save or load
+	m_saveload_buffer = buffer;
+	m_saveload_buffer_size = size;
+
+	// note the start time and set a timer for the next timeslice to actually schedule it
+	m_saveload_schedule = saveload_schedule::LOAD;
+	m_saveload_schedule_time = this->time();
+
+	// we can't be paused since we need to clear out anonymous timers
+	resume();
+}
+
+
+//-------------------------------------------------
 //  immediate_save - save state.
 //-------------------------------------------------
 
@@ -659,6 +679,26 @@ void running_machine::schedule_load(std::string &&filename)
 {
 	// specify the filename to save or load
 	set_saveload_filename(std::move(filename));
+
+	// note the start time and set a timer for the next timeslice to actually schedule it
+	m_saveload_schedule = saveload_schedule::LOAD;
+	m_saveload_schedule_time = this->time();
+
+	// we can't be paused since we need to clear out anonymous timers
+	resume();
+}
+
+
+//-------------------------------------------------
+//  schedule_buffer_load - schedule a buffered
+//  load to occur as soon as possible
+//-------------------------------------------------
+
+void running_machine::schedule_buffer_load(void *buffer, size_t size)
+{
+	// set the buffer for save or load
+	m_saveload_buffer = buffer;
+	m_saveload_buffer_size = size;
 
 	// note the start time and set a timer for the next timeslice to actually schedule it
 	m_saveload_schedule = saveload_schedule::LOAD;
@@ -860,77 +900,116 @@ void running_machine::call_notifiers(machine_notification which)
 
 void running_machine::handle_saveload()
 {
-	// if no name, bail
-	if (!m_saveload_pending_file.empty())
-	{
-		const char *const opname = (m_saveload_schedule == saveload_schedule::LOAD) ? "load" : "save";
+	const char *const opname = (m_saveload_schedule == saveload_schedule::LOAD) ? "load" : "save";
 
-		// if there are anonymous timers, we can't save just yet, and we can't load yet either
-		// because the timers might overwrite data we have loaded
-		if (!m_scheduler.can_save())
+	// if there are anonymous timers, we can't save just yet, and we can't load yet either
+	// because the timers might overwrite data we have loaded
+	if (!m_scheduler.can_save())
+	{
+		// if more than a second has passed, we're probably screwed
+		if ((this->time() - m_saveload_schedule_time) > attotime::from_seconds(1))
+			popmessage("Unable to %s due to pending anonymous timers. See error.log for details.", opname);
+		else
+			return; // return without cancelling the operation
+	}
+	// if no file name or buffer, bail
+	else if (!m_saveload_pending_file.empty())
+	{
+		u32 const openflags = (m_saveload_schedule == saveload_schedule::LOAD) ? OPEN_FLAG_READ : (OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS);
+
+		// open the file
+		emu_file file(m_saveload_searchpath, openflags);
+		auto const filerr = file.open(m_saveload_pending_file.c_str());
+		if (filerr == osd_file::error::NONE)
 		{
-			// if more than a second has passed, we're probably screwed
-			if ((this->time() - m_saveload_schedule_time) > attotime::from_seconds(1))
-				popmessage("Unable to %s due to pending anonymous timers. See error.log for details.", opname);
-			else
-				return; // return without cancelling the operation
+			const char *const opnamed = (m_saveload_schedule == saveload_schedule::LOAD) ? "loaded" : "saved";
+
+			// read/write the save state
+			save_error saverr = (m_saveload_schedule == saveload_schedule::LOAD) ? m_save.read_file(file) : m_save.write_file(file);
+
+			// handle the result
+			switch (saverr)
+			{
+			case STATERR_ILLEGAL_REGISTRATIONS:
+				popmessage("Error: Unable to %s state due to illegal registrations. See error.log for details.", opname);
+				break;
+
+			case STATERR_INVALID_HEADER:
+				popmessage("Error: Unable to %s state due to an invalid header. Make sure the save state is correct for this machine.", opname);
+				break;
+
+			case STATERR_READ_ERROR:
+				popmessage("Error: Unable to %s state due to a read error (file is likely corrupt).", opname);
+				break;
+
+			case STATERR_WRITE_ERROR:
+				popmessage("Error: Unable to %s state due to a write error. Verify there is enough disk space.", opname);
+				break;
+
+			case STATERR_NONE:
+				if (!(m_system.flags & MACHINE_SUPPORTS_SAVE))
+					popmessage("State successfully %s.\nWarning: Save states are not officially supported for this machine.", opnamed);
+				else
+					popmessage("State successfully %s.", opnamed);
+				break;
+
+			default:
+				popmessage("Error: Unknown error during state %s.", opnamed);
+				break;
+			}
+
+			// close and perhaps delete the file
+			if (saverr != STATERR_NONE && m_saveload_schedule == saveload_schedule::SAVE)
+				file.remove_on_close();
 		}
 		else
+			popmessage("Error: Failed to open file for %s operation.", opname);
+	}
+	else if (m_saveload_buffer != nullptr && m_saveload_buffer_size)
+	{
+		const char *const opnamed = (m_saveload_schedule == saveload_schedule::LOAD) ? "loaded" : "saved";
+
+		// read/write the save state
+		save_error saverr = (m_saveload_schedule == saveload_schedule::LOAD)
+			? m_save.read_buffer(m_saveload_buffer, m_saveload_buffer_size)
+			: m_save.write_buffer(m_saveload_buffer, m_saveload_buffer_size);
+
+		// handle the result
+		switch (saverr)
 		{
-			u32 const openflags = (m_saveload_schedule == saveload_schedule::LOAD) ? OPEN_FLAG_READ : (OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS);
+		case STATERR_ILLEGAL_REGISTRATIONS:
+			popmessage("Error: Unable to %s state due to illegal registrations. See error.log for details.", opname);
+			break;
 
-			// open the file
-			emu_file file(m_saveload_searchpath, openflags);
-			auto const filerr = file.open(m_saveload_pending_file.c_str());
-			if (filerr == osd_file::error::NONE)
-			{
-				const char *const opnamed = (m_saveload_schedule == saveload_schedule::LOAD) ? "loaded" : "saved";
+		case STATERR_INVALID_HEADER:
+			popmessage("Error: Unable to %s state due to an invalid header. Make sure the save state is correct for this machine.", opname);
+			break;
 
-				// read/write the save state
-				save_error saverr = (m_saveload_schedule == saveload_schedule::LOAD) ? m_save.read_file(file) : m_save.write_file(file);
+		case STATERR_READ_ERROR:
+			popmessage("Error: Unable to %s state due to a read error (file is likely corrupt).", opname);
+			break;
 
-				// handle the result
-				switch (saverr)
-				{
-				case STATERR_ILLEGAL_REGISTRATIONS:
-					popmessage("Error: Unable to %s state due to illegal registrations. See error.log for details.", opname);
-					break;
+		case STATERR_WRITE_ERROR:
+			popmessage("Error: Unable to %s state due to a write error. Verify there is enough disk space.", opname);
+			break;
 
-				case STATERR_INVALID_HEADER:
-					popmessage("Error: Unable to %s state due to an invalid header. Make sure the save state is correct for this machine.", opname);
-					break;
-
-				case STATERR_READ_ERROR:
-					popmessage("Error: Unable to %s state due to a read error (file is likely corrupt).", opname);
-					break;
-
-				case STATERR_WRITE_ERROR:
-					popmessage("Error: Unable to %s state due to a write error. Verify there is enough disk space.", opname);
-					break;
-
-				case STATERR_NONE:
-					if (!(m_system.flags & MACHINE_SUPPORTS_SAVE))
-						popmessage("State successfully %s.\nWarning: Save states are not officially supported for this machine.", opnamed);
-					else
-						popmessage("State successfully %s.", opnamed);
-					break;
-
-				default:
-					popmessage("Error: Unknown error during state %s.", opnamed);
-					break;
-				}
-
-				// close and perhaps delete the file
-				if (saverr != STATERR_NONE && m_saveload_schedule == saveload_schedule::SAVE)
-					file.remove_on_close();
-			}
+		case STATERR_NONE:
+			if (!(m_system.flags & MACHINE_SUPPORTS_SAVE))
+				popmessage("State successfully %s.\nWarning: Save states are not officially supported for this machine.", opnamed);
 			else
-				popmessage("Error: Failed to open file for %s operation.", opname);
+				popmessage("State successfully %s.", opnamed);
+			break;
+
+		default:
+			popmessage("Error: Unknown error during state %s.", opnamed);
+			break;
 		}
 	}
 
 	// unschedule the operation
 	m_saveload_pending_file.clear();
+	m_saveload_buffer = nullptr;
+	m_saveload_buffer_size = 0;
 	m_saveload_searchpath = nullptr;
 	m_saveload_schedule = saveload_schedule::NONE;
 }

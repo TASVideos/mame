@@ -106,6 +106,10 @@ void retro_frame_draw_enable(bool enable);
 
 void *retro_get_fb_ptr(void);
 
+size_t retro_serialize_size(void);
+bool retro_serialize(void *data, size_t size);
+bool retro_unserialize(const void * data, size_t size);
+
 #ifdef __cplusplus
 extern "C" {
 #endif

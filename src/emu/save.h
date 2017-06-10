@@ -153,6 +153,11 @@ public:
 	save_error write_file(emu_file &file);
 	save_error read_file(emu_file &file);
 
+	// buffer processing
+	size_t get_save_buffer_size();
+	save_error write_buffer(void *data, size_t size);
+	save_error read_buffer(void *data, size_t size);
+
 private:
 	// internal helpers
 	u32 signature() const;

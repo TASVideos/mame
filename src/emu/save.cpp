@@ -213,17 +213,35 @@ save_error save_manager::check_file(running_machine &machine, emu_file &file, co
 	return validate_header(header, gamename, sig, errormsg, "");
 }
 
+
+//-------------------------------------------------
+//  get_save_buffer_size - returns total size of
+//  all registered entries plus header size
+//-------------------------------------------------
+
+size_t save_manager::get_save_buffer_size()
+{
+	size_t totalsize = 0;
+	for (auto &entry : m_entry_list)
+	{
+		totalsize += entry->m_typesize * entry->m_typecount;
+	}
+	
+	return totalsize + HEADER_SIZE;
+}
+
+
 //-------------------------------------------------
 //  dispatch_postload - invoke all registered
 //  postload callbacks for updates
 //-------------------------------------------------
-
 
 void save_manager::dispatch_postload()
 {
 	for (auto &func : m_postload_list)
 		func->m_func();
 }
+
 
 //-------------------------------------------------
 //  read_file - read the data from a file
@@ -269,17 +287,72 @@ save_error save_manager::read_file(emu_file &file)
 	return STATERR_NONE;
 }
 
+
+//-------------------------------------------------
+//  read_buffer - reads the data from a buffer
+//-------------------------------------------------
+
+save_error save_manager::read_buffer(void *data, size_t size)
+{
+	// if we have illegal registrations, return an error
+	if (m_illegal_regs > 0)
+		return STATERR_ILLEGAL_REGISTRATIONS;
+
+	// verify the buffer length
+	if (size != get_save_buffer_size())
+		return STATERR_READ_ERROR;
+
+	// read the header
+	u8 header[HEADER_SIZE];
+	std::memcpy(header, data, sizeof(header));
+
+	// advance the pointer and keep it void
+	u8 *byte_ptr = (u8 *)data + sizeof(header);
+	data = (void *)byte_ptr;
+
+	// verify the header and report an error if it doesn't match
+	u32 sig = signature();
+	if (validate_header(header, machine().system().name, sig, nullptr, "Error: ") != STATERR_NONE)
+		return STATERR_INVALID_HEADER;
+
+	// determine whether or not to flip the data when done
+	bool flip = NATIVE_ENDIAN_VALUE_LE_BE((header[9] & SS_MSB_FIRST) != 0, (header[9] & SS_MSB_FIRST) == 0);
+
+	// get a pointer the remaining data
+	auto *src_entry_list = static_cast<std::vector<std::unique_ptr<state_entry>> *>(data);
+
+	// source index
+	int index = 0;
+
+	// read all the data, flipping if necessary
+	for (auto &entry : m_entry_list)
+	{
+		u32 totalsize = entry->m_typesize * entry->m_typecount;
+		memcpy(entry->m_data, &src_entry_list[index++], totalsize);
+		
+		// handle flipping
+		if (flip)
+			entry->flip_data();
+	}
+
+	// call the post-load functions
+	dispatch_postload();
+
+	return STATERR_NONE;
+}
+
+
 //-------------------------------------------------
 //  dispatch_presave - invoke all registered
 //  presave callbacks for updates
 //-------------------------------------------------
-
 
 void save_manager::dispatch_presave()
 {
 	for (auto &func : m_presave_list)
 		func->m_func();
 }
+
 
 //-------------------------------------------------
 //  write_file - writes the data to a file
@@ -317,6 +390,57 @@ save_error save_manager::write_file(emu_file &file)
 		if (file.write(entry->m_data, totalsize) != totalsize)
 			return STATERR_WRITE_ERROR;
 	}
+
+	return STATERR_NONE;
+}
+
+
+//-------------------------------------------------
+//  write_buffer - writes the data to a buffer
+//-------------------------------------------------
+
+save_error save_manager::write_buffer(void *data, size_t size)
+{
+	// if we have illegal registrations, return an error
+	if (m_illegal_regs > 0)
+		return STATERR_ILLEGAL_REGISTRATIONS;
+
+	// verify the buffer length
+	if (size != get_save_buffer_size())
+		return STATERR_WRITE_ERROR;
+
+	// generate the header
+	u8 header[HEADER_SIZE];
+	memcpy(&header[0], STATE_MAGIC_NUM, 8);
+	header[8] = SAVE_VERSION;
+	header[9] = NATIVE_ENDIAN_VALUE_LE_BE(0, SS_MSB_FIRST);
+	strncpy((char *)&header[0x0a], machine().system().name, 0x1c - 0x0a);
+	u32 sig = signature();
+	*(u32 *)&header[0x1c] = little_endianize_int32(sig);
+
+	// write the header
+	std::memcpy(data, header, sizeof(header));
+
+	// advance the pointer and keep it void
+	u8 *byte_ptr = (u8 *)data + sizeof(header);
+	data = (void *)byte_ptr;
+
+	// call the pre-save functions
+	dispatch_presave();
+
+	// get a pointer the remaining data
+	auto *dst_entry_list = static_cast<std::vector<std::unique_ptr<state_entry>> *>(data);
+
+	// destination index
+	int index = 0;
+
+	// then write all the data
+	for (auto &entry : m_entry_list)
+	{
+		u32 totalsize = entry->m_typesize * entry->m_typecount;
+		memcpy(&dst_entry_list[index++], entry->m_data, totalsize);
+	}
+
 	return STATERR_NONE;
 }
 
