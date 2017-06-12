@@ -306,10 +306,6 @@ save_error save_manager::read_buffer(void *data, size_t size)
 	u8 header[HEADER_SIZE];
 	std::memcpy(header, data, sizeof(header));
 
-	// advance the pointer and keep it void
-	u8 *byte_ptr = (u8 *)data + sizeof(header);
-	data = (void *)byte_ptr;
-
 	// verify the header and report an error if it doesn't match
 	u32 sig = signature();
 	if (validate_header(header, machine().system().name, sig, nullptr, "Error: ") != STATERR_NONE)
@@ -318,17 +314,20 @@ save_error save_manager::read_buffer(void *data, size_t size)
 	// determine whether or not to flip the data when done
 	bool flip = NATIVE_ENDIAN_VALUE_LE_BE((header[9] & SS_MSB_FIRST) != 0, (header[9] & SS_MSB_FIRST) == 0);
 
-	// get a pointer the remaining data
-	auto *src_entry_list = static_cast<std::vector<std::unique_ptr<state_entry>> *>(data);
-
-	// source index
-	int index = 0;
+	// advance the pointer
+	u8 *byte_ptr = (u8 *)data + sizeof(header);
 
 	// read all the data, flipping if necessary
 	for (auto &entry : m_entry_list)
 	{
 		u32 totalsize = entry->m_typesize * entry->m_typecount;
-		memcpy(entry->m_data, &src_entry_list[index++], totalsize);
+
+		// check bounds before reading
+		if (byte_ptr + totalsize > (u8 *)data + size)
+			return STATERR_READ_ERROR;
+
+		memcpy(entry->m_data, byte_ptr, totalsize);
+		byte_ptr += totalsize;
 		
 		// handle flipping
 		if (flip)
@@ -421,24 +420,23 @@ save_error save_manager::write_buffer(void *data, size_t size)
 	// write the header
 	std::memcpy(data, header, sizeof(header));
 
-	// advance the pointer and keep it void
-	u8 *byte_ptr = (u8 *)data + sizeof(header);
-	data = (void *)byte_ptr;
-
 	// call the pre-save functions
 	dispatch_presave();
 
-	// get a pointer the remaining data
-	auto *dst_entry_list = static_cast<std::vector<std::unique_ptr<state_entry>> *>(data);
+	// advance the pointer
+	u8 *byte_ptr = (u8 *)data + sizeof(header);
 
-	// destination index
-	int index = 0;
-
-	// then write all the data
+	// write all the data
 	for (auto &entry : m_entry_list)
 	{
 		u32 totalsize = entry->m_typesize * entry->m_typecount;
-		memcpy(&dst_entry_list[index++], entry->m_data, totalsize);
+
+		// check bounds before writing
+		if (byte_ptr + totalsize > (u8 *)data + size)
+			return STATERR_WRITE_ERROR;
+
+		memcpy(byte_ptr, entry->m_data, totalsize);
+		byte_ptr += totalsize;
 	}
 
 	return STATERR_NONE;

@@ -297,17 +297,28 @@ void retro_osd_interface::customize_input_type_list(simple_list<input_type_entry
 		}
 }
 
+
+// Specification demands that state size is the same between retro_load_game() and retro_unload_game().
+// MAME states do not change over time. But it's not launched at retro_load_game(), only later on.
+// So state size is not known when libretro wants it. Libretro just lets MAME do its internal states instead.
+// But if we want to use the state buffer for something specific, we should either allow variable state size
+// or make MAME launch during retro_load_game()
+
 size_t retro_serialize_size(void)
 {
 	if (retro_global_osd)
+	{
+		// retroarch will refuse to use a state, as it's size has changed since the fist call
+		// but some other client (bizhawk in this case) might make use of it
 		return retro_global_osd->machine().save().get_save_buffer_size();
-	else
-		return 0;
+	}
+
+	return 0;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-	if (retro_serialize_size() && data && size)
+	if (retro_serialize_size() && data && size && retro_global_osd)
 	{
 		retro_global_osd->machine().schedule_buffer_save(data, size);
 
@@ -319,7 +330,7 @@ bool retro_serialize(void *data, size_t size)
 
 bool retro_unserialize(const void *data, size_t size)
 {
-	if (retro_serialize_size() && data && size)
+	if (retro_serialize_size() && data && size && retro_global_osd)
 	{
 		retro_global_osd->machine().schedule_buffer_load((void *)data, size);
 

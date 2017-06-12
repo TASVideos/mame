@@ -219,32 +219,32 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
 
-if(alternate_renderer==true)
-{
-      char *pch;
-      char str[100];
-	  snprintf(str, sizeof(str), "%s", var.value);
-
-      pch = strtok(str, "x");
-      if (pch){
-         fb_width = strtoul(pch, NULL, 0);
-	 fb_pitch=fb_width;
+      if(alternate_renderer==true)
+      {
+         char *pch;
+         char str[100];
+	     snprintf(str, sizeof(str), "%s", var.value);
+      
+         pch = strtok(str, "x");
+         if (pch){
+            fb_width = strtoul(pch, NULL, 0);
+	        fb_pitch=fb_width;
+         }
+         pch = strtok(NULL, "x");
+         if (pch)
+            fb_height = strtoul(pch, NULL, 0);
+      
+         fprintf(stderr, "[libretro-test]: Got size: %u x %u.\n", fb_width, fb_height);
+         retro_aspect =(float)fb_width/(float)fb_height ;
+      
+         if ( (int)(fb_width/4) ==(int)(fb_height/3) )
+            res_43 = true;
+         else
+            res_43 = false;
+      
+	     NEWGAME_FROM_OSD=1;
+         video_changed=true;
       }
-      pch = strtok(NULL, "x");
-      if (pch)
-         fb_height = strtoul(pch, NULL, 0);
-
-      fprintf(stderr, "[libretro-test]: Got size: %u x %u.\n", fb_width, fb_height);
-retro_aspect =(float)fb_width/(float)fb_height ;
-
-      if ( (int)(fb_width/4) ==(int)(fb_height/3) )
-         res_43 = true;
-      else
-         res_43 = false;
-
-	NEWGAME_FROM_OSD=1;
-video_changed=true;
-}
 
    }
 

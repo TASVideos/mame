@@ -644,7 +644,7 @@ void running_machine::schedule_buffer_save(void *buffer, size_t size)
 	m_saveload_buffer_size = size;
 
 	// note the start time and set a timer for the next timeslice to actually schedule it
-	m_saveload_schedule = saveload_schedule::LOAD;
+	m_saveload_schedule = saveload_schedule::SAVE;
 	m_saveload_schedule_time = this->time();
 
 	// we can't be paused since we need to clear out anonymous timers
