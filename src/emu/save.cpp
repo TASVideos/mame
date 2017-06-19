@@ -304,7 +304,7 @@ save_error save_manager::read_buffer(void *data, size_t size)
 
 	// read the header
 	u8 header[HEADER_SIZE];
-	std::memcpy(header, data, sizeof(header));
+	memcpy(header, data, sizeof(header));
 
 	// verify the header and report an error if it doesn't match
 	u32 sig = signature();
@@ -418,7 +418,7 @@ save_error save_manager::write_buffer(void *data, size_t size)
 	*(u32 *)&header[0x1c] = little_endianize_int32(sig);
 
 	// write the header
-	std::memcpy(data, header, sizeof(header));
+	memcpy(data, header, sizeof(header));
 
 	// call the pre-save functions
 	dispatch_presave();
